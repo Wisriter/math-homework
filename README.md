@@ -1,2 +1,2 @@
 # test-demo
-This  is a description
+min_fai.py is the experiment's code.
