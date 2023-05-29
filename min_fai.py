@@ -4,6 +4,8 @@
 import numpy as np
 import sympy as sp
 from autograd import hessian
+from scipy.optimize import minimize
+from scipy.optimize import minimize_scalar
 
 
 def objective_function(x):
@@ -54,39 +56,68 @@ def hessian_f(x0):
     return hessian_values
 
 
+def get_min_point():
+    initial_guess = [1, 2]
+    result = minimize(objective_function(), initial_guess, method='BFGS', tol=1e-6)
+    min_point = result.x
+    return min_point
+
+
 """
 1. 最速下降
 这个方法效果最差，需要针对具体的目标函数和初值，选取合适的学习率和tolerance
 """
 
 
-def steepest_descent(x0, max_iterations=1000, tolerance=1e-5):
-    # 初始化参数
+def steepest_descent(x0, max_iterations=1000, tolerance=1e-7):
     current_point = x0
-
     i = 0
-
-    # 迭代更新
     while i < max_iterations:
-        gradient_value = gradient(current_point)
-        direction = -gradient_value  # 最速下降方向，取梯度的反方向
-        learning_rate = calculate_learning_rate(gradient_value, current_point)  # 动态计算学习率
-        current_point = current_point + learning_rate * direction
-
-        # 计算目标函数的变化量
-        previous_value = objective_function(current_point - learning_rate * direction)
-        current_value = objective_function(current_point)
-        delta = np.abs(current_value - previous_value)
-
-        # 判断是否满足停止迭代条件
-        if delta < tolerance:
+        grad = gradient(current_point)
+        dk = -grad
+        dk = dk.astype(float)
+        if np.linalg.norm(dk) < tolerance:
             break
-
-        i += 1
+        else:
+            lr = calculate_learning_rate01(current_point, dk)  # 动态计算学习率
+            current_point = current_point + lr * dk
+            print(current_point, "\t", objective_function(current_point))
+            i += 1
     return current_point, i
 
 
-def calculate_learning_rate(grad, x):
+def calculate_learning_rate01(current_point, dk):
+    # 定义符号变量，变成关于a的一元函数
+    x, y, a = sp.symbols('x y a')
+
+    # 定义x和y关于z的线性表达式
+    x_expr = current_point[0] + a * dk[0]
+    y_expr = current_point[1] + a * dk[1]
+    # 定义二元函数
+    expr1 = (1 - x) ** 2 + 100 * (y - x ** 2) ** 2
+
+    expr2 = (1.5 - x + x * y) ** 2 + (2.25 - x + x * y ** 2) ** 2 + (
+            2.625 - x + x * y ** 3) ** 2
+
+    expr3 = (1 + (x + y + 1) ** 2 * (
+            19 - 14 * x + 3 * x ** 2 - 14 * y + 6 * x * y + 3 * y ** 2)) * (
+                    30 + (2 * x - 3 * y) ** 2 * (
+                    18 - 32 * x + 12 * x ** 2 + 48 * y - 36 * x * y + 27 * y ** 2))
+    f = expr1
+
+    # 将f表示为关于z的一元函数
+    f_a = f.subs([(x, x_expr), (y, y_expr)])
+    # 将符号表达式转换为可进行数值计算的函数
+    f_a_func = sp.lambdify(a, f_a)
+    # 使用 minimize_scalar 函数求解最小值
+    result = minimize_scalar(f_a_func, bounds=(0, 1e+8))  # 区间[0, None)不行，得用一个大数作为正无穷
+
+    # 提取最小值对应的 x 值
+    minimum_a = result.x
+    return minimum_a
+
+
+def calculate_learning_rate02(grad, x):
     # 动态计算学习率
     numerator = np.dot(grad, grad)
     denominator = np.dot(grad, np.dot(hessian_f(x), grad))
@@ -115,7 +146,7 @@ def gradient_descent(x0, learning_rate=0.001, max_iterations=20000, tolerance=1e
 """
 
 
-def damped_newton(f, x0, max_iterations=100, tolerance=1e-6):
+def damped_newton(f, x0, max_iterations=1000, tolerance=1e-6):
     x = x0
     for i in range(max_iterations):
         grad = gradient(x)
@@ -180,13 +211,13 @@ if __name__ == '__main__':
     （2）：(3, 0.5);
     （3）：(1.2, 0.8)
     """
-    x0 = np.array([1, 2])  # 初始值
+    x0 = np.array([0.9, 1.1])  # 初始值
 
     xy_1, i = steepest_descent(x0)
     print(f"最速下降法第{i}次迭代：目标函数值为：{objective_function(xy_1)}，在{xy_1}处取得\n")
 
-    xy_2, j = damped_newton(objective_function, x0)
-    print(f"牛顿阻尼法第{j}次迭代：目标函数值为：{objective_function(xy_2)}，在{xy_2}处取得\n")
-
-    xy_3, k = bfgs_method(objective_function, x0)
-    print(f"BFGS方法第{k}次迭代：目标函数值为：{objective_function(xy_3)}，在{xy_3}处取得\n")
+    # xy_2, j = damped_newton(objective_function, x0)
+    # print(f"牛顿阻尼法第{j}次迭代：目标函数值为：{objective_function(xy_2)}，在{xy_2}处取得\n")
+    #
+    # xy_3, k = bfgs_method(objective_function, x0)
+    # print(f"BFGS方法第{k}次迭代：目标函数值为：{objective_function(xy_3)}，在{xy_3}处取得\n")
